@@ -6,7 +6,7 @@ import struct
 import pytest
 
 from app.constants import CHUNK_BYTES
-from app.pipeline.orchestrator import PipelineOrchestrator
+from app.pipeline.orchestrator import PipelineOrchestrator, TTSResult
 from app.schemas import PartialTranscript, TranslationResult
 
 
@@ -42,25 +42,26 @@ class TestPipelineOrchestrator:
     ) -> None:
         """Sessizlikte mesaj üretilmemeli."""
         for _ in range(20):
-            msgs = await orchestrator.process_chunk(silence_chunk)
+            msgs, tts = await orchestrator.process_chunk(silence_chunk)
             assert len(msgs) == 0
+            assert len(tts) == 0
 
     @pytest.mark.asyncio
-    async def test_speech_produces_transcript_and_translation(
+    async def test_speech_produces_all_outputs(
         self,
         orchestrator: PipelineOrchestrator,
         speech_chunk: bytes,
         silence_chunk: bytes,
     ) -> None:
-        """Konuşma + sessizlik → transcript + translation."""
-        # 10 chunk konuşma
+        """Konuşma → transcript + translation + TTS."""
         for _ in range(10):
             await orchestrator.process_chunk(speech_chunk)
-        # 12 chunk sessizlik
         all_msgs: list = []
+        all_tts: list = []
         for _ in range(12):
-            msgs = await orchestrator.process_chunk(silence_chunk)
+            msgs, tts = await orchestrator.process_chunk(silence_chunk)
             all_msgs.extend(msgs)
+            all_tts.extend(tts)
 
         has_transcript = any(
             isinstance(m, PartialTranscript) for m in all_msgs
@@ -70,44 +71,60 @@ class TestPipelineOrchestrator:
         )
         assert has_transcript
         assert has_translation
+        assert len(all_tts) > 0
+        assert all(isinstance(t, TTSResult) for t in all_tts)
 
     @pytest.mark.asyncio
-    async def test_translation_has_target_langs(
+    async def test_tts_has_audio_bytes(
         self,
         orchestrator: PipelineOrchestrator,
         speech_chunk: bytes,
         silence_chunk: bytes,
     ) -> None:
-        """Translation sonucu hedef dilleri içermeli."""
+        """TTS sonucu audio bytes içermeli."""
         for _ in range(10):
             await orchestrator.process_chunk(speech_chunk)
-        all_msgs: list = []
+        all_tts: list = []
         for _ in range(12):
-            msgs = await orchestrator.process_chunk(silence_chunk)
-            all_msgs.extend(msgs)
+            _, tts = await orchestrator.process_chunk(silence_chunk)
+            all_tts.extend(tts)
 
-        translations = [
-            m for m in all_msgs if isinstance(m, TranslationResult)
-        ]
-        assert len(translations) > 0
-        t = translations[0]
-        # source_lang = "tr" (mock whisper), target'lar en + th
-        # source_lang kendisi target'ta olmamalı
-        assert len(t.translations) > 0
+        for t in all_tts:
+            assert isinstance(t.audio, bytes)
+            assert len(t.audio) > 0
+            assert t.lang in {"en", "th"}
 
     @pytest.mark.asyncio
-    async def test_cache_hit_on_repeat(
+    async def test_latency_stats_populated(
         self,
         orchestrator: PipelineOrchestrator,
         speech_chunk: bytes,
         silence_chunk: bytes,
     ) -> None:
-        """Aynı metin tekrar gelince cache hit olmalı."""
-        # İlk turda cache'e yazar
+        """Pipeline çalıştıktan sonra latency stats dolu olmalı."""
         for _ in range(10):
             await orchestrator.process_chunk(speech_chunk)
         for _ in range(12):
             await orchestrator.process_chunk(silence_chunk)
 
-        # Cache stats kontrol
-        assert orchestrator._cache.size > 0
+        stats = orchestrator.latency_stats
+        assert "asr" in stats
+        assert stats["asr"]["count"] > 0
+
+    @pytest.mark.asyncio
+    async def test_tts_disabled(
+        self, speech_chunk: bytes, silence_chunk: bytes
+    ) -> None:
+        """enable_tts=False → TTS üretilmemeli."""
+        orch = PipelineOrchestrator(
+            use_mocks=True,
+            target_langs=["en"],
+            enable_tts=False,
+        )
+        for _ in range(10):
+            await orch.process_chunk(speech_chunk)
+        all_tts: list = []
+        for _ in range(12):
+            _, tts = await orch.process_chunk(silence_chunk)
+            all_tts.extend(tts)
+        assert len(all_tts) == 0

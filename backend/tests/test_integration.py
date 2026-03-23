@@ -112,3 +112,7 @@ class TestIntegration:
                 translation = ws.receive_json()
                 assert translation["type"] == "translation"
                 assert "translations" in translation
+
+                # TTS binary frame(lar) gelmeli
+                tts_frame = ws.receive_bytes()
+                assert len(tts_frame) > 4  # min: 4-byte header len

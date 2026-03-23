@@ -11,22 +11,21 @@ from app.pipeline.orchestrator import PipelineOrchestrator
 from app.schemas import (
     ConfigMessage,
     ErrorResponse,
+    TTSHeader,
     parse_client_message,
     serialize_server_message,
 )
 from app.websockets.connection_manager import ConnectionManager
-from app.websockets.protocol import classify_frame
+from app.websockets.protocol import classify_frame, pack_tts_frame
 
 logger = logging.getLogger(__name__)
 
 manager = ConnectionManager()
+_tts_chunk_counter: dict[int, int] = {}
 
 
 async def websocket_translate(ws: WebSocket) -> None:
-    """WebSocket audio translation endpoint.
-
-    Flow: accept → config bekle → pipeline loop → cleanup.
-    """
+    """WebSocket audio translation endpoint."""
     await ws.accept()
     try:
         config = await _receive_config(ws)
@@ -40,6 +39,8 @@ async def websocket_translate(ws: WebSocket) -> None:
             config_source_lang=config.source_lang,
             azure_key=settings.AZURE_TRANSLATOR_KEY,
             azure_region=settings.AZURE_TRANSLATOR_REGION,
+            azure_speech_key=settings.AZURE_SPEECH_KEY,
+            azure_speech_region=settings.AZURE_SPEECH_REGION,
         )
         await _pipeline_loop(ws, pipeline)
     except WebSocketDisconnect:
@@ -49,7 +50,7 @@ async def websocket_translate(ws: WebSocket) -> None:
 
 
 async def _receive_config(ws: WebSocket) -> ConfigMessage | None:
-    """İlk mesajı config olarak al. Değilse error gönder."""
+    """İlk mesajı config olarak al."""
     try:
         text = await ws.receive_text()
     except WebSocketDisconnect:
@@ -73,7 +74,7 @@ async def _receive_config(ws: WebSocket) -> ConfigMessage | None:
 async def _pipeline_loop(
     ws: WebSocket, pipeline: PipelineOrchestrator
 ) -> None:
-    """Audio → VAD → ASR → Translation pipeline loop."""
+    """Audio → VAD → ASR → Translation → TTS pipeline loop."""
     while True:
         msg = await ws.receive()
         if msg["type"] == "websocket.disconnect":
@@ -87,12 +88,16 @@ async def _pipeline_loop(
 async def _handle_audio(
     ws: WebSocket, pipeline: PipelineOrchestrator, data: bytes
 ) -> None:
-    """Audio chunk → pipeline → mesajları gönder."""
+    """Audio chunk → pipeline → JSON + binary mesajlar gönder."""
     try:
         validate_chunk(data)
-        messages = await pipeline.process_chunk(data)
+        messages, tts_results = await pipeline.process_chunk(data)
         for message in messages:
             await ws.send_text(serialize_server_message(message))
+        for tts in tts_results:
+            header = TTSHeader(lang=tts.lang, chunk_index=0)
+            frame = pack_tts_frame(header, tts.audio)
+            await ws.send_bytes(frame)
     except AudioFormatError as e:
         logger.warning(f"[AUDIO] {e}")
 

@@ -19,3 +19,9 @@ app.websocket("/ws/translate")(websocket_translate)
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "babelflow"}
+
+
+@app.get("/api/latency")
+async def latency():
+    """Pipeline latency istatistikleri."""
+    return {"stats": {}, "note": "Per-connection stats via WebSocket"}
