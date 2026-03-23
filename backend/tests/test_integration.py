@@ -106,3 +106,9 @@ class TestIntegration:
             assert response["type"] == "partial_transcript"
             assert "text" in response
             assert "lang" in response
+
+            # Translation mesajı da gelmeli (mock transcript text doluysa)
+            if response["text"]:
+                translation = ws.receive_json()
+                assert translation["type"] == "translation"
+                assert "translations" in translation

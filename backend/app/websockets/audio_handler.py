@@ -7,13 +7,13 @@ from fastapi import WebSocket, WebSocketDisconnect
 from app.audio.capture import validate_chunk
 from app.config import get_settings
 from app.exceptions import AudioFormatError, WebSocketError
+from app.pipeline.orchestrator import PipelineOrchestrator
 from app.schemas import (
     ConfigMessage,
     ErrorResponse,
     parse_client_message,
     serialize_server_message,
 )
-from app.transcription.streaming import StreamingTranscriber
 from app.websockets.connection_manager import ConnectionManager
 from app.websockets.protocol import classify_frame
 
@@ -25,7 +25,7 @@ manager = ConnectionManager()
 async def websocket_translate(ws: WebSocket) -> None:
     """WebSocket audio translation endpoint.
 
-    Flow: accept → config bekle → audio loop → cleanup.
+    Flow: accept → config bekle → pipeline loop → cleanup.
     """
     await ws.accept()
     try:
@@ -34,8 +34,14 @@ async def websocket_translate(ws: WebSocket) -> None:
             return
         manager.connect(ws, config)
         settings = get_settings()
-        transcriber = StreamingTranscriber(use_mocks=settings.USE_MOCKS)
-        await _audio_loop(ws, transcriber)
+        pipeline = PipelineOrchestrator(
+            use_mocks=settings.USE_MOCKS,
+            target_langs=config.target_langs,
+            config_source_lang=config.source_lang,
+            azure_key=settings.AZURE_TRANSLATOR_KEY,
+            azure_region=settings.AZURE_TRANSLATOR_REGION,
+        )
+        await _pipeline_loop(ws, pipeline)
     except WebSocketDisconnect:
         logger.info("[WS] Client disconnected")
     finally:
@@ -64,29 +70,29 @@ async def _receive_config(ws: WebSocket) -> ConfigMessage | None:
         return None
 
 
-async def _audio_loop(
-    ws: WebSocket, transcriber: StreamingTranscriber
+async def _pipeline_loop(
+    ws: WebSocket, pipeline: PipelineOrchestrator
 ) -> None:
-    """Audio chunk'ları al, VAD+Whisper ile işle, sonuç gönder."""
+    """Audio → VAD → ASR → Translation pipeline loop."""
     while True:
         msg = await ws.receive()
         if msg["type"] == "websocket.disconnect":
             break
         if "bytes" in msg and msg["bytes"]:
-            await _handle_audio(ws, transcriber, msg["bytes"])
+            await _handle_audio(ws, pipeline, msg["bytes"])
         elif "text" in msg and msg["text"]:
             await _handle_text(ws, msg["text"])
 
 
 async def _handle_audio(
-    ws: WebSocket, transcriber: StreamingTranscriber, data: bytes
+    ws: WebSocket, pipeline: PipelineOrchestrator, data: bytes
 ) -> None:
-    """Audio chunk'ı işle, transcript varsa gönder."""
+    """Audio chunk → pipeline → mesajları gönder."""
     try:
         validate_chunk(data)
-        transcript = transcriber.process_chunk(data)
-        if transcript is not None:
-            await ws.send_text(serialize_server_message(transcript))
+        messages = await pipeline.process_chunk(data)
+        for message in messages:
+            await ws.send_text(serialize_server_message(message))
     except AudioFormatError as e:
         logger.warning(f"[AUDIO] {e}")
 
