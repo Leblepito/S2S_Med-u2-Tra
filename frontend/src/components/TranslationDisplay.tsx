@@ -60,7 +60,7 @@ export function TranslationDisplay({
   const hasSpeakers = transcripts.some((t) => t.speaker_id !== transcripts[0]?.speaker_id)
 
   return (
-    <div className="flex flex-col gap-3 p-4 max-h-96 overflow-y-auto">
+    <div className="flex flex-col gap-3 p-4 max-h-96 overflow-y-auto" aria-live="polite" aria-label="Translation output">
       {/* Grouped transcripts by speaker */}
       {groups.map((group, gi) => {
         const color = getSpeakerColor(group.speakerId)
