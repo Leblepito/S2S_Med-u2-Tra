@@ -52,6 +52,7 @@ class PartialTranscript(BaseModel):
     lang: str
     speaker_id: int
     confidence: float = Field(ge=0.0, le=1.0)
+    detected_terms: list[str] = Field(default_factory=list)
 
     @field_validator("lang")
     @classmethod
@@ -71,6 +72,7 @@ class FinalTranscript(BaseModel):
     lang: str
     speaker_id: int
     confidence: float = Field(ge=0.0, le=1.0)
+    detected_terms: list[str] = Field(default_factory=list)
 
     @field_validator("lang")
     @classmethod
@@ -90,6 +92,7 @@ class TranslationResult(BaseModel):
     source_lang: str
     translations: dict[str, str]
     speaker_id: int
+    glossary_notes: list[str] = Field(default_factory=list)
 
     @field_validator("source_lang")
     @classmethod
