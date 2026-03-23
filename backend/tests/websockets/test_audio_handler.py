@@ -64,3 +64,16 @@ class TestWebSocketAudioHandler:
             ws.send_text("invalid json{{{")
             response = ws.receive_json()
             assert response["type"] == "error"
+
+    def test_oversized_chunk_rejected(self, client: TestClient) -> None:
+        """10KB'dan büyük chunk → error mesajı."""
+        with client.websocket_connect("/ws/translate") as ws:
+            ws.send_json({
+                "type": "config",
+                "source_lang": "auto",
+                "target_langs": ["en"],
+            })
+            ws.send_bytes(bytes(20000))  # 20KB > 10KB limit
+            response = ws.receive_json()
+            assert response["type"] == "error"
+            assert response["code"] == "CHUNK_TOO_LARGE"

@@ -1,5 +1,6 @@
 """WebSocket audio stream handler — /ws/translate endpoint."""
 
+import asyncio
 import json
 import logging
 import time
@@ -8,7 +9,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 
 from app.audio.capture import validate_chunk
 from app.config import get_settings
-from app.exceptions import AudioFormatError, WebSocketError
+from app.exceptions import AudioFormatError, BabelFlowError, WebSocketError
 from app.pipeline.orchestrator import PipelineOrchestrator
 from app.schemas import (
     ConfigMessage,
@@ -24,8 +25,9 @@ logger = logging.getLogger(__name__)
 
 manager = ConnectionManager()
 
-# Global session metrics
 _total_sessions: int = 0
+_MAX_CHUNK_SIZE: int = 10240  # 10KB
+_IDLE_TIMEOUT_S: float = 300.0  # 5 dakika
 
 
 def get_metrics() -> dict:
@@ -67,7 +69,7 @@ async def websocket_translate(ws: WebSocket) -> None:
         pass
     finally:
         manager.disconnect(ws)
-        duration_s = (time.perf_counter() - session_start)
+        duration_s = time.perf_counter() - session_start
         logger.info(json.dumps({
             "event": "session_end",
             "duration_s": round(duration_s, 2),
@@ -102,17 +104,38 @@ async def _receive_config(ws: WebSocket) -> ConfigMessage | None:
 async def _pipeline_loop(
     ws: WebSocket, pipeline: PipelineOrchestrator
 ) -> tuple[int, int]:
-    """Audio pipeline loop. Returns (chunk_count, transcript_count)."""
+    """Audio pipeline loop with idle timeout."""
     chunk_count = 0
     transcript_count = 0
 
     while True:
-        msg = await ws.receive()
+        try:
+            msg = await asyncio.wait_for(
+                ws.receive(), timeout=_IDLE_TIMEOUT_S
+            )
+        except asyncio.TimeoutError:
+            logger.info("[WS] Idle timeout — disconnecting")
+            error = ErrorResponse(
+                message="Idle timeout (5 min)", code="IDLE_TIMEOUT"
+            )
+            await ws.send_text(serialize_server_message(error))
+            await ws.close()
+            break
+
         if msg["type"] == "websocket.disconnect":
             break
+
         if "bytes" in msg and msg["bytes"]:
+            data = msg["bytes"]
+            if len(data) > _MAX_CHUNK_SIZE:
+                error = ErrorResponse(
+                    message=f"Chunk too large: {len(data)} > {_MAX_CHUNK_SIZE}",
+                    code="CHUNK_TOO_LARGE",
+                )
+                await ws.send_text(serialize_server_message(error))
+                continue
             chunk_count += 1
-            tc = await _handle_audio(ws, pipeline, msg["bytes"])
+            tc = await _handle_audio(ws, pipeline, data)
             transcript_count += tc
         elif "text" in msg and msg["text"]:
             await _handle_text(ws, msg["text"])
@@ -123,19 +146,28 @@ async def _pipeline_loop(
 async def _handle_audio(
     ws: WebSocket, pipeline: PipelineOrchestrator, data: bytes
 ) -> int:
-    """Audio chunk → pipeline → mesajlar gönder. Returns transcript count."""
+    """Audio chunk → pipeline → mesajlar gönder. TTS fail → text only."""
     try:
         validate_chunk(data)
         messages, tts_results = await pipeline.process_chunk(data)
+
         for message in messages:
             await ws.send_text(serialize_server_message(message))
+
         for tts in tts_results:
-            header = TTSHeader(lang=tts.lang, chunk_index=0)
-            frame = pack_tts_frame(header, tts.audio)
-            await ws.send_bytes(frame)
+            try:
+                header = TTSHeader(lang=tts.lang, chunk_index=0)
+                frame = pack_tts_frame(header, tts.audio)
+                await ws.send_bytes(frame)
+            except Exception as e:
+                logger.warning(f"[TTS_SEND] Skipped: {e}")
+
         return len([m for m in messages if hasattr(m, "text")])
     except AudioFormatError as e:
         logger.warning(f"[AUDIO] {e}")
+        return 0
+    except BabelFlowError as e:
+        logger.error(f"[PIPELINE] Stage error: {e}")
         return 0
 
 
