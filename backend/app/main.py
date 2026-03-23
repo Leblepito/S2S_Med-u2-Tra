@@ -7,8 +7,10 @@ from typing import AsyncIterator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.admin.routes import router as admin_router
 from app.config import get_settings
 from app.constants import SUPPORTED_LANGS
+from app.database.connection import create_tables
 from app.middleware import CORSPreflightCacheMiddleware, RateLimitMiddleware, RequestLoggingMiddleware
 from app.websockets.audio_handler import get_metrics, websocket_translate
 
@@ -32,7 +34,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info(f"  CORS: {settings.cors_origin_list}")
     logger.info(f"  Azure Translator: {'configured' if settings.AZURE_TRANSLATOR_KEY else 'not set'}")
     logger.info(f"  Azure Speech: {'configured' if settings.AZURE_SPEECH_KEY else 'not set'}")
+    logger.info(f"  Database: {settings.DATABASE_URL}")
     logger.info("=" * 50)
+    await create_tables()
     yield
 
 
@@ -49,6 +53,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(admin_router)
 app.websocket("/ws/translate")(websocket_translate)
 
 

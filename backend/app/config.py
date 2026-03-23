@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     # Glossary pipeline hooks (MVP: passthrough)
     GLOSSARY_MODE: str = "passthrough"
 
+    # Database
+    DATABASE_URL: str = "sqlite+aiosqlite:///./babelflow.db"
+
     # Server
     PORT: int = 8000
     CORS_ORIGINS: str = "http://localhost:3000"
