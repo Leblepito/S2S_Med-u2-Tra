@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { AdminPanel } from './components/admin/AdminPanel'
 import { AudioCapture } from './components/AudioCapture'
 import { ConnectionStatus } from './components/ConnectionStatus'
 import { ConversationHistory } from './components/ConversationHistory'
@@ -25,6 +26,7 @@ function App() {
   const [targetLangs, setTargetLangs] = useState<SupportedLang[]>(['en', 'th'])
   const [darkMode, toggleDark] = useDarkMode()
   const [showHistory, setShowHistory] = useState(false)
+  const [showAdmin, setShowAdmin] = useState(false)
   const { status: wsStatus, lastMessage, lastTtsAudio } = useWebSocket(WS_URL)
   const { partialText, transcripts, translations, activeSpeakers, handleMessage, reset } = useTranslation()
   const { isMuted, enqueue, toggleMute } = useTtsPlayback()
@@ -99,6 +101,7 @@ function App() {
         onToggleMute={toggleMute}
         darkMode={darkMode}
         onToggleDark={toggleDark}
+        onToggleAdmin={() => setShowAdmin((p) => !p)}
       />
 
       <ConnectionStatus wsStatus={wsStatus} backendHealthy={backendHealthy} />
@@ -157,6 +160,9 @@ function App() {
           </main>
         )}
       </ErrorBoundary>
+
+      {/* Admin Panel */}
+      {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
 
       {/* History Sidebar */}
       {showHistory && (

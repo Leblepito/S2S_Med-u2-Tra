@@ -6,9 +6,10 @@ interface HeaderProps {
   onToggleMute: () => void
   darkMode: boolean
   onToggleDark: () => void
+  onToggleAdmin: () => void
 }
 
-export function Header({ latencyMs, isMuted, onToggleMute, darkMode, onToggleDark }: HeaderProps) {
+export function Header({ latencyMs, isMuted, onToggleMute, darkMode, onToggleDark, onToggleAdmin }: HeaderProps) {
   return (
     <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 sm:px-6 py-3 sm:py-4 shadow-sm">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
@@ -29,6 +30,12 @@ export function Header({ latencyMs, isMuted, onToggleMute, darkMode, onToggleDar
             }`}
           >
             {isMuted ? 'Unmute' : 'Mute'}
+          </button>
+          <button
+            onClick={onToggleAdmin}
+            className="px-3 py-1 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+          >
+            Admin
           </button>
           <button
             onClick={onToggleDark}
