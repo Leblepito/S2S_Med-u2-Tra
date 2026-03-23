@@ -1,6 +1,8 @@
 """WebSocket audio stream handler — /ws/translate endpoint."""
 
+import json
 import logging
+import time
 
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -21,12 +23,28 @@ from app.websockets.protocol import classify_frame, pack_tts_frame
 logger = logging.getLogger(__name__)
 
 manager = ConnectionManager()
-_tts_chunk_counter: dict[int, int] = {}
+
+# Global session metrics
+_total_sessions: int = 0
+
+
+def get_metrics() -> dict:
+    """Global WebSocket metrikleri döndür."""
+    return {
+        "active_connections": manager.active_count,
+        "total_sessions": _total_sessions,
+    }
 
 
 async def websocket_translate(ws: WebSocket) -> None:
     """WebSocket audio translation endpoint."""
+    global _total_sessions
     await ws.accept()
+    session_start = time.perf_counter()
+    chunk_count = 0
+    transcript_count = 0
+    _total_sessions += 1
+
     try:
         config = await _receive_config(ws)
         if config is None:
@@ -44,11 +62,19 @@ async def websocket_translate(ws: WebSocket) -> None:
             enable_diarization=config.enable_diarization,
             glossary_mode=settings.GLOSSARY_MODE,
         )
-        await _pipeline_loop(ws, pipeline)
+        chunk_count, transcript_count = await _pipeline_loop(ws, pipeline)
     except WebSocketDisconnect:
-        logger.info("[WS] Client disconnected")
+        pass
     finally:
         manager.disconnect(ws)
+        duration_s = (time.perf_counter() - session_start)
+        logger.info(json.dumps({
+            "event": "session_end",
+            "duration_s": round(duration_s, 2),
+            "chunks": chunk_count,
+            "transcripts": transcript_count,
+            "active": manager.active_count,
+        }))
 
 
 async def _receive_config(ws: WebSocket) -> ConfigMessage | None:
@@ -75,22 +101,29 @@ async def _receive_config(ws: WebSocket) -> ConfigMessage | None:
 
 async def _pipeline_loop(
     ws: WebSocket, pipeline: PipelineOrchestrator
-) -> None:
-    """Audio → VAD → ASR → Translation → TTS pipeline loop."""
+) -> tuple[int, int]:
+    """Audio pipeline loop. Returns (chunk_count, transcript_count)."""
+    chunk_count = 0
+    transcript_count = 0
+
     while True:
         msg = await ws.receive()
         if msg["type"] == "websocket.disconnect":
             break
         if "bytes" in msg and msg["bytes"]:
-            await _handle_audio(ws, pipeline, msg["bytes"])
+            chunk_count += 1
+            tc = await _handle_audio(ws, pipeline, msg["bytes"])
+            transcript_count += tc
         elif "text" in msg and msg["text"]:
             await _handle_text(ws, msg["text"])
+
+    return chunk_count, transcript_count
 
 
 async def _handle_audio(
     ws: WebSocket, pipeline: PipelineOrchestrator, data: bytes
-) -> None:
-    """Audio chunk → pipeline → JSON + binary mesajlar gönder."""
+) -> int:
+    """Audio chunk → pipeline → mesajlar gönder. Returns transcript count."""
     try:
         validate_chunk(data)
         messages, tts_results = await pipeline.process_chunk(data)
@@ -100,8 +133,10 @@ async def _handle_audio(
             header = TTSHeader(lang=tts.lang, chunk_index=0)
             frame = pack_tts_frame(header, tts.audio)
             await ws.send_bytes(frame)
+        return len([m for m in messages if hasattr(m, "text")])
     except AudioFormatError as e:
         logger.warning(f"[AUDIO] {e}")
+        return 0
 
 
 async def _handle_text(ws: WebSocket, text: str) -> None:

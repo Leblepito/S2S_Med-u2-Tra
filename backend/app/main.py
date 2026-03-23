@@ -9,11 +9,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.constants import SUPPORTED_LANGS
-from app.websockets.audio_handler import websocket_translate
+from app.middleware import CORSPreflightCacheMiddleware, RequestLoggingMiddleware
+from app.websockets.audio_handler import get_metrics, websocket_translate
 
 settings = get_settings()
 
-logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL, logging.INFO))
+logging.basicConfig(
+    level=getattr(logging, settings.LOG_LEVEL, logging.INFO),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 logger = logging.getLogger(__name__)
 
 
@@ -34,6 +38,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="BabelFlow", version="0.1.0", lifespan=lifespan)
 
+app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(CORSPreflightCacheMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
@@ -84,3 +90,9 @@ async def pipeline_status() -> dict:
 async def latency() -> dict:
     """Pipeline latency istatistikleri."""
     return {"stats": {}, "note": "Per-connection stats via WebSocket"}
+
+
+@app.get("/api/metrics")
+async def metrics() -> dict:
+    """WebSocket session metrikleri."""
+    return get_metrics()

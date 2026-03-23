@@ -104,6 +104,7 @@ class PipelineOrchestrator:
         messages: list[PipelineMessage] = []
         tts_results: list[TTSResult] = []
 
+        self._monitor.start_pipeline()
         self._monitor.start_stage("asr")
         stream_result = self._transcriber.process_chunk_with_segment(chunk)
         self._monitor.end_stage("asr")
@@ -165,6 +166,7 @@ class PipelineOrchestrator:
                     translation.translations
                 )
 
+        self._monitor.end_pipeline()
         return messages, tts_results
 
     async def _translate_with_cache(
