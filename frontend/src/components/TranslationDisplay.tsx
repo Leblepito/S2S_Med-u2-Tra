@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import type { FinalTranscript, TranslationResult } from '../types'
 import { SpeakerIndicator, getSpeakerColor } from './SpeakerIndicator'
 
@@ -10,7 +11,7 @@ interface TranslationDisplayProps {
 
 function LangBadge({ lang }: { lang: string }) {
   return (
-    <span className="inline-block px-1.5 py-0.5 text-xs font-medium rounded bg-gray-200 text-gray-700 uppercase">
+    <span className="inline-block px-1.5 py-0.5 text-xs font-medium rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 uppercase">
       {lang}
     </span>
   )
@@ -38,11 +39,18 @@ export function TranslationDisplay({
   translations,
   activeSpeakers,
 }: TranslationDisplayProps) {
+  const bottomRef = useRef<HTMLDivElement>(null)
   const hasContent = partialText || transcripts.length > 0 || translations.length > 0
+
+  useEffect(() => {
+    if (bottomRef.current?.scrollIntoView) {
+      bottomRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [partialText, transcripts.length, translations.length])
 
   if (!hasContent) {
     return (
-      <div className="text-center text-gray-400 py-8">
+      <div className="text-center text-gray-400 dark:text-gray-600 py-8">
         Waiting for speech...
       </div>
     )
@@ -70,7 +78,7 @@ export function TranslationDisplay({
                 className={`flex items-start gap-2 ${hasSpeakers ? 'ml-4' : ''}`}
               >
                 <LangBadge lang={t.lang} />
-                <p className={`text-sm ${hasSpeakers ? color.text : 'text-gray-800'}`}>
+                <p className={`text-sm ${hasSpeakers ? color.text : 'text-gray-800 dark:text-gray-200'}`}>
                   {t.text}
                 </p>
               </div>
@@ -83,21 +91,23 @@ export function TranslationDisplay({
       {partialText && (
         <div className="flex items-start gap-2 opacity-60">
           <div className="w-2 h-2 mt-1.5 rounded-full bg-blue-400 animate-pulse" />
-          <p className="text-gray-600 text-sm italic">{partialText}</p>
+          <p className="text-gray-600 dark:text-gray-400 text-sm italic">{partialText}</p>
         </div>
       )}
 
       {/* Translations */}
       {translations.map((tr, i) => (
-        <div key={`tr-${i}`} className="border-l-2 border-blue-300 pl-3 ml-2">
+        <div key={`tr-${i}`} className="border-l-2 border-blue-300 dark:border-blue-700 pl-3 ml-2">
           {Object.entries(tr.translations).map(([lang, text]) => (
             <div key={lang} className="flex items-start gap-2 mb-1">
               <LangBadge lang={lang} />
-              <p className="text-gray-700 text-sm">{text}</p>
+              <p className="text-gray-700 dark:text-gray-300 text-sm">{text}</p>
             </div>
           ))}
         </div>
       ))}
+
+      <div ref={bottomRef} />
     </div>
   )
 }
