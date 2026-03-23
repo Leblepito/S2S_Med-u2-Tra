@@ -9,6 +9,12 @@ from fastapi import WebSocket, WebSocketDisconnect
 
 from app.audio.capture import validate_chunk
 from app.config import get_settings
+from app.database.persist import (
+    fire_and_forget,
+    persist_session_end,
+    persist_session_start,
+    persist_transcript,
+)
 from app.exceptions import AudioFormatError, BabelFlowError, WebSocketError
 from app.pipeline.orchestrator import PipelineOrchestrator
 from app.schemas import (
@@ -47,12 +53,17 @@ async def websocket_translate(ws: WebSocket) -> None:
     transcript_count = 0
     _total_sessions += 1
 
+    db_session_id = ""
     try:
         config = await _receive_config(ws)
         if config is None:
             return
         manager.connect(ws, config)
         settings = get_settings()
+        db_session_id = await persist_session_start(
+            source_lang=config.source_lang,
+            target_langs=config.target_langs,
+        )
         pipeline = PipelineOrchestrator(
             use_mocks=settings.USE_MOCKS,
             target_langs=config.target_langs,
@@ -64,12 +75,15 @@ async def websocket_translate(ws: WebSocket) -> None:
             enable_diarization=config.enable_diarization,
             glossary_mode=settings.GLOSSARY_MODE,
         )
-        chunk_count, transcript_count = await _pipeline_loop(ws, pipeline)
+        chunk_count, transcript_count = await _pipeline_loop(
+            ws, pipeline, db_session_id
+        )
     except WebSocketDisconnect:
         pass
     finally:
         manager.disconnect(ws)
         duration_s = time.perf_counter() - session_start
+        fire_and_forget(persist_session_end(db_session_id, duration_s))
         logger.info(json.dumps({
             "event": "session_end",
             "duration_s": round(duration_s, 2),
@@ -102,7 +116,7 @@ async def _receive_config(ws: WebSocket) -> ConfigMessage | None:
 
 
 async def _pipeline_loop(
-    ws: WebSocket, pipeline: PipelineOrchestrator
+    ws: WebSocket, pipeline: PipelineOrchestrator, db_session_id: str = ""
 ) -> tuple[int, int]:
     """Audio pipeline loop with idle timeout."""
     chunk_count = 0
@@ -135,7 +149,7 @@ async def _pipeline_loop(
                 await ws.send_text(serialize_server_message(error))
                 continue
             chunk_count += 1
-            tc = await _handle_audio(ws, pipeline, data)
+            tc = await _handle_audio(ws, pipeline, data, db_session_id)
             transcript_count += tc
         elif "text" in msg and msg["text"]:
             await _handle_text(ws, msg["text"])
@@ -144,15 +158,30 @@ async def _pipeline_loop(
 
 
 async def _handle_audio(
-    ws: WebSocket, pipeline: PipelineOrchestrator, data: bytes
+    ws: WebSocket,
+    pipeline: PipelineOrchestrator,
+    data: bytes,
+    db_session_id: str = "",
 ) -> int:
-    """Audio chunk → pipeline → mesajlar gönder. TTS fail → text only."""
+    """Audio chunk → pipeline → mesajlar gönder + DB persist."""
     try:
         validate_chunk(data)
         messages, tts_results = await pipeline.process_chunk(data)
 
         for message in messages:
             await ws.send_text(serialize_server_message(message))
+            # DB persist: transcript + translation (fire-and-forget)
+            if hasattr(message, "confidence"):
+                translations = None
+                if tts_results or len(messages) > 1:
+                    for m in messages:
+                        if hasattr(m, "translations"):
+                            translations = m.translations
+                fire_and_forget(persist_transcript(
+                    db_session_id, message.speaker_id,
+                    message.text, message.lang, message.confidence,
+                    translations,
+                ))
 
         for tts in tts_results:
             try:

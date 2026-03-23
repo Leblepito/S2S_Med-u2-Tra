@@ -10,7 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.admin.routes import router as admin_router
 from app.config import get_settings
 from app.constants import SUPPORTED_LANGS
-from app.database.connection import create_tables
+from app.database.connection import create_tables, get_session_factory
+from app.glossary.seed import seed_glossary_data
 from app.middleware import CORSPreflightCacheMiddleware, RateLimitMiddleware, RequestLoggingMiddleware
 from app.websockets.audio_handler import get_metrics, websocket_translate
 
@@ -37,6 +38,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info(f"  Database: {settings.DATABASE_URL}")
     logger.info("=" * 50)
     await create_tables()
+    try:
+        factory = get_session_factory()
+        async with factory() as db:
+            await seed_glossary_data(db)
+    except Exception as e:
+        logger.warning(f"[SEED] Glossary seed failed: {e}")
     yield
 
 

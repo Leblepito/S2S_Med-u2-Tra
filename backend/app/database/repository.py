@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.database.models import (
     GlossaryDomain,
     GlossaryTerm,
+    GlossaryTranslation,
     Session,
     Transcript,
     Translation,
@@ -187,3 +188,15 @@ async def create_glossary_term(
     await db.commit()
     await db.refresh(term)
     return term
+
+
+async def get_glossary_term_translations(
+    db: AsyncSession, term_id: str
+) -> list[GlossaryTranslation]:
+    """Terim çevirileri."""
+    result = await db.execute(
+        select(GlossaryTranslation).where(
+            GlossaryTranslation.term_id == term_id
+        )
+    )
+    return list(result.scalars().all())

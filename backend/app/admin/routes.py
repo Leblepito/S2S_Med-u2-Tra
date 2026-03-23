@@ -146,3 +146,27 @@ async def create_term(
         context_note=body.context_note,
     )
     return {"id": term.id, "canonical_term": term.canonical_term}
+
+
+@router.get("/glossary/export")
+async def export_glossary(db: AsyncSession = Depends(get_db)) -> dict:
+    """Tüm glossary'yi JSON olarak export et."""
+    domains = await repo.get_glossary_domains(db)
+    result = []
+    for d in domains:
+        terms = await repo.get_glossary_terms(db, d.id)
+        term_list = []
+        for t in terms:
+            translations = await repo.get_glossary_term_translations(db, t.id)
+            trans_dict = {tr.language: tr.translation for tr in translations}
+            term_list.append({
+                "canonical_term": t.canonical_term,
+                "category": t.category or "",
+                "translations": trans_dict,
+            })
+        result.append({
+            "name": d.name,
+            "description": d.description or "",
+            "terms": term_list,
+        })
+    return {"domains": result}
