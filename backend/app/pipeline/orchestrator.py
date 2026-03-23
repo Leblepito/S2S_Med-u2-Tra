@@ -1,8 +1,9 @@
-"""Pipeline orchestrator — ASR → Glossary → Translation → TTS."""
+"""Pipeline orchestrator — ASR → Diarize → Glossary → Translation → TTS."""
 
 import logging
 from typing import Any, Optional, Union
 
+from app.audio.diarization import SpeakerDiarizer, create_diarizer
 from app.glossary.base import (
     ContextEnricher,
     EnrichedResult,
@@ -55,9 +56,13 @@ class PipelineOrchestrator:
         azure_speech_key: str = "",
         azure_speech_region: str = "southeastasia",
         enable_tts: bool = True,
+        enable_diarization: bool = False,
         glossary_mode: str = "passthrough",
     ) -> None:
         self._transcriber = StreamingTranscriber(use_mocks=use_mocks)
+        self._diarizer: SpeakerDiarizer = create_diarizer(use_mocks=use_mocks)
+        self._enable_diarization = enable_diarization
+        self._speaker_langs: dict[int, str] = {}  # per-speaker dil takibi
         self._translator: Translator = create_translator(
             use_mocks=use_mocks,
             azure_key=azure_key,
@@ -91,7 +96,7 @@ class PipelineOrchestrator:
     async def process_chunk(
         self, chunk: bytes
     ) -> tuple[list[PipelineMessage], list[TTSResult]]:
-        """Chunk → ASR → Glossary → Translation → TTS.
+        """Chunk → ASR → Diarize → Glossary → Translation → TTS.
 
         Returns:
             (mesajlar, tts_results) tuple.
@@ -100,11 +105,26 @@ class PipelineOrchestrator:
         tts_results: list[TTSResult] = []
 
         self._monitor.start_stage("asr")
-        transcript = self._transcriber.process_chunk(chunk)
+        stream_result = self._transcriber.process_chunk_with_segment(chunk)
         self._monitor.end_stage("asr")
 
-        if transcript is None:
+        if stream_result is None:
             return messages, tts_results
+
+        transcript = stream_result.transcript
+
+        # Speaker diarization
+        if self._enable_diarization:
+            self._monitor.start_stage("diarize")
+            speaker_id = self._diarizer.identify(stream_result.segment)
+            self._monitor.end_stage("diarize")
+            transcript = PartialTranscript(
+                text=transcript.text,
+                lang=transcript.lang,
+                speaker_id=speaker_id,
+                confidence=transcript.confidence,
+            )
+            self._speaker_langs[speaker_id] = transcript.lang
 
         # Glossary pre-process
         self._monitor.start_stage("glossary_pre")
@@ -123,7 +143,7 @@ class PipelineOrchestrator:
 
         self._monitor.start_stage("translate")
         translation = await self._translate_with_cache(
-            transcript.text, source_lang
+            transcript.text, source_lang, transcript.speaker_id
         )
         self._monitor.end_stage("translate")
 
@@ -148,7 +168,7 @@ class PipelineOrchestrator:
         return messages, tts_results
 
     async def _translate_with_cache(
-        self, text: str, source_lang: str
+        self, text: str, source_lang: str, speaker_id: int = 0
     ) -> Optional[TranslationResult]:
         """Cache kontrollü çeviri."""
         translations: dict[str, str] = {}
@@ -178,7 +198,7 @@ class PipelineOrchestrator:
             source_text=text,
             source_lang=source_lang,
             translations=translations,
-            speaker_id=0,
+            speaker_id=speaker_id,
         )
 
     async def _synthesize_all(

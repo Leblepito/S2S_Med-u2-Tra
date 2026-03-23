@@ -2,7 +2,10 @@
 
 import logging
 import time
+from dataclasses import dataclass
 from typing import Optional
+
+import numpy as np
 
 from app.audio.vad import SpeechSegmentDetector, create_vad
 from app.schemas import PartialTranscript
@@ -12,6 +15,14 @@ from app.transcription.whisper_engine import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class StreamingResult:
+    """Streaming transcription sonucu + raw audio segment."""
+
+    transcript: PartialTranscript
+    segment: np.ndarray
 
 
 class StreamingTranscriber:
@@ -40,7 +51,9 @@ class StreamingTranscriber:
         )
         self.last_latency_ms: Optional[float] = None
 
-    def process_chunk(self, chunk: bytes) -> Optional[PartialTranscript]:
+    def process_chunk(
+        self, chunk: bytes
+    ) -> Optional[PartialTranscript]:
         """Chunk işle, transcript hazırsa döndür.
 
         Args:
@@ -48,6 +61,22 @@ class StreamingTranscriber:
 
         Returns:
             PartialTranscript veya None.
+        """
+        result = self.process_chunk_with_segment(chunk)
+        if result is None:
+            return None
+        return result.transcript
+
+    def process_chunk_with_segment(
+        self, chunk: bytes
+    ) -> Optional[StreamingResult]:
+        """Chunk işle, transcript + raw segment döndür.
+
+        Args:
+            chunk: PCM16 audio chunk.
+
+        Returns:
+            StreamingResult veya None.
         """
         segment = self._detector.process_chunk(chunk)
         if segment is None:
@@ -62,9 +91,10 @@ class StreamingTranscriber:
             f"'{result.text[:50]}'"
         )
 
-        return PartialTranscript(
+        transcript = PartialTranscript(
             text=result.text,
             lang=result.language,
             speaker_id=0,
             confidence=result.confidence,
         )
+        return StreamingResult(transcript=transcript, segment=segment)

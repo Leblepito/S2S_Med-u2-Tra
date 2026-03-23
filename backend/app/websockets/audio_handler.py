@@ -41,6 +41,8 @@ async def websocket_translate(ws: WebSocket) -> None:
             azure_region=settings.AZURE_TRANSLATOR_REGION,
             azure_speech_key=settings.AZURE_SPEECH_KEY,
             azure_speech_region=settings.AZURE_SPEECH_REGION,
+            enable_diarization=config.enable_diarization,
+            glossary_mode=settings.GLOSSARY_MODE,
         )
         await _pipeline_loop(ws, pipeline)
     except WebSocketDisconnect:
