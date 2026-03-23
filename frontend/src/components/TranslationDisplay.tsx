@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { FinalTranscript, TranslationResult } from '../types'
+import { GlossaryInsights } from './GlossaryInsights'
 import { SpeakerIndicator, getSpeakerColor } from './SpeakerIndicator'
 
 interface TranslationDisplayProps {
@@ -73,14 +74,14 @@ export function TranslationDisplay({
               />
             )}
             {group.items.map((t, ti) => (
-              <div
-                key={`t-${gi}-${ti}`}
-                className={`flex items-start gap-2 ${hasSpeakers ? 'ml-4' : ''}`}
-              >
-                <LangBadge lang={t.lang} />
-                <p className={`text-sm ${hasSpeakers ? color.text : 'text-gray-800 dark:text-gray-200'}`}>
-                  {t.text}
-                </p>
+              <div key={`t-${gi}-${ti}`}>
+                <div className={`flex items-start gap-2 ${hasSpeakers ? 'ml-4' : ''}`}>
+                  <LangBadge lang={t.lang} />
+                  <p className={`text-sm ${hasSpeakers ? color.text : 'text-gray-800 dark:text-gray-200'}`}>
+                    {t.text}
+                  </p>
+                </div>
+                <GlossaryInsights detectedTerms={t.detected_terms} />
               </div>
             ))}
           </div>
@@ -104,6 +105,7 @@ export function TranslationDisplay({
               <p className="text-gray-700 dark:text-gray-300 text-sm">{text}</p>
             </div>
           ))}
+          <GlossaryInsights glossaryNotes={tr.glossary_notes} />
         </div>
       ))}
 
