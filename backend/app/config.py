@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     USE_MOCKS: bool = True
     LOG_LEVEL: str = "INFO"
 
+    # Glossary pipeline hooks (MVP: passthrough)
+    GLOSSARY_MODE: str = "passthrough"
+
 
 @lru_cache
 def get_settings() -> Settings:

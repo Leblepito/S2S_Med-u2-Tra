@@ -1,8 +1,19 @@
-"""Pipeline orchestrator — ASR → Translation → TTS akışı."""
+"""Pipeline orchestrator — ASR → Glossary → Translation → TTS."""
 
 import logging
 from typing import Any, Optional, Union
 
+from app.glossary.base import (
+    ContextEnricher,
+    EnrichedResult,
+    GlossaryPostProcessor,
+    GlossaryPreProcessor,
+)
+from app.glossary.factory import (
+    create_enricher,
+    create_post_processor,
+    create_pre_processor,
+)
 from app.pipeline.latency_monitor import LatencyMonitor
 from app.schemas import PartialTranscript, TTSHeader, TranslationResult
 from app.transcription.streaming import StreamingTranscriber
@@ -25,12 +36,13 @@ class TTSResult:
 
 
 class PipelineOrchestrator:
-    """ASR → Translation → TTS pipeline.
+    """ASR → Glossary Pre → Translation → Glossary Post → Enrich → TTS.
 
     Args:
         use_mocks: Mock mode.
         target_langs: Hedef diller.
         config_source_lang: Client config kaynak dili.
+        glossary_mode: Glossary processor modu.
     """
 
     def __init__(
@@ -43,6 +55,7 @@ class PipelineOrchestrator:
         azure_speech_key: str = "",
         azure_speech_region: str = "southeastasia",
         enable_tts: bool = True,
+        glossary_mode: str = "passthrough",
     ) -> None:
         self._transcriber = StreamingTranscriber(use_mocks=use_mocks)
         self._translator: Translator = create_translator(
@@ -55,21 +68,30 @@ class PipelineOrchestrator:
             azure_key=azure_speech_key,
             azure_region=azure_speech_region,
         )
+        self._pre: GlossaryPreProcessor = create_pre_processor(glossary_mode)
+        self._post: GlossaryPostProcessor = create_post_processor(glossary_mode)
+        self._enricher: ContextEnricher = create_enricher(glossary_mode)
         self._cache = TranslationCache()
         self._monitor = LatencyMonitor()
         self._target_langs = target_langs or ["en"]
         self._config_source_lang = config_source_lang
         self._enable_tts = enable_tts
+        self._last_enriched: Optional[EnrichedResult] = None
 
     @property
     def latency_stats(self) -> dict[str, Any]:
         """Latency istatistikleri."""
         return self._monitor.get_stats()
 
+    @property
+    def last_enriched(self) -> Optional[EnrichedResult]:
+        """Son enrichment sonucu."""
+        return self._last_enriched
+
     async def process_chunk(
         self, chunk: bytes
     ) -> tuple[list[PipelineMessage], list[TTSResult]]:
-        """Chunk → ASR → Translation → TTS.
+        """Chunk → ASR → Glossary → Translation → TTS.
 
         Returns:
             (mesajlar, tts_results) tuple.
@@ -83,6 +105,11 @@ class PipelineOrchestrator:
 
         if transcript is None:
             return messages, tts_results
+
+        # Glossary pre-process
+        self._monitor.start_stage("glossary_pre")
+        transcript = await self._pre.process(transcript)
+        self._monitor.end_stage("glossary_pre")
 
         messages.append(transcript)
         if not transcript.text:
@@ -101,7 +128,18 @@ class PipelineOrchestrator:
         self._monitor.end_stage("translate")
 
         if translation:
+            # Glossary post-process
+            self._monitor.start_stage("glossary_post")
+            translation = await self._post.process(translation)
+            self._monitor.end_stage("glossary_post")
+
+            # Context enrichment
+            self._monitor.start_stage("enrich")
+            self._last_enriched = await self._enricher.enrich(translation)
+            self._monitor.end_stage("enrich")
+
             messages.append(translation)
+
             if self._enable_tts:
                 tts_results = await self._synthesize_all(
                     translation.translations
