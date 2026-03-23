@@ -36,6 +36,15 @@ class Settings(BaseSettings):
     # Glossary pipeline hooks (MVP: passthrough)
     GLOSSARY_MODE: str = "passthrough"
 
+    # Server
+    PORT: int = 8000
+    CORS_ORIGINS: str = "http://localhost:3000"
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        """CORS origins'i liste olarak döndür."""
+        return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+
 
 @lru_cache
 def get_settings() -> Settings:

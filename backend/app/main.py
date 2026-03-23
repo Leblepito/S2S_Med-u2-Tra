@@ -1,5 +1,9 @@
 """BabelFlow — FastAPI application."""
 
+import logging
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -7,11 +11,32 @@ from app.config import get_settings
 from app.constants import SUPPORTED_LANGS
 from app.websockets.audio_handler import websocket_translate
 
-app = FastAPI(title="BabelFlow", version="0.1.0")
+settings = get_settings()
+
+logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL, logging.INFO))
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Uygulama yaşam döngüsü — startup log."""
+    logger.info("=" * 50)
+    logger.info("BabelFlow starting...")
+    logger.info(f"  USE_MOCKS: {settings.USE_MOCKS}")
+    logger.info(f"  GLOSSARY_MODE: {settings.GLOSSARY_MODE}")
+    logger.info(f"  WHISPER: {settings.WHISPER_MODEL_SIZE} ({settings.WHISPER_DEVICE})")
+    logger.info(f"  CORS: {settings.cors_origin_list}")
+    logger.info(f"  Azure Translator: {'configured' if settings.AZURE_TRANSLATOR_KEY else 'not set'}")
+    logger.info(f"  Azure Speech: {'configured' if settings.AZURE_SPEECH_KEY else 'not set'}")
+    logger.info("=" * 50)
+    yield
+
+
+app = FastAPI(title="BabelFlow", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=settings.cors_origin_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -29,13 +54,13 @@ async def health() -> dict:
 @app.get("/api/config")
 async def config_summary() -> dict:
     """Aktif config özeti."""
-    settings = get_settings()
     return {
         "mock_mode": settings.USE_MOCKS,
         "glossary_mode": settings.GLOSSARY_MODE,
         "whisper_model": settings.WHISPER_MODEL_SIZE,
         "whisper_device": settings.WHISPER_DEVICE,
         "supported_langs": sorted(SUPPORTED_LANGS),
+        "cors_origins": settings.cors_origin_list,
         "azure_translator_configured": bool(settings.AZURE_TRANSLATOR_KEY),
         "azure_speech_configured": bool(settings.AZURE_SPEECH_KEY),
     }
@@ -44,7 +69,6 @@ async def config_summary() -> dict:
 @app.get("/api/pipeline/status")
 async def pipeline_status() -> dict:
     """Pipeline health — her stage'in durumu."""
-    settings = get_settings()
     stages = {
         "vad": "mock" if settings.USE_MOCKS else "silero",
         "asr": "mock" if settings.USE_MOCKS else f"whisper-{settings.WHISPER_MODEL_SIZE}",

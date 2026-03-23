@@ -38,6 +38,22 @@ class TestSettings:
         assert settings.USE_MOCKS is True
         assert settings.LOG_LEVEL == "INFO"
 
+    def test_cors_origins_default(self) -> None:
+        """Default CORS origins localhost:3000."""
+        settings = Settings()
+        assert settings.CORS_ORIGINS == "http://localhost:3000"
+        assert settings.cors_origin_list == ["http://localhost:3000"]
+
+    def test_cors_origins_multiple(self) -> None:
+        """Comma-separated CORS origins."""
+        env = {"CORS_ORIGINS": "http://localhost:3000,https://app.babelflow.io"}
+        with patch.dict(os.environ, env, clear=False):
+            settings = Settings()
+            origins = settings.cors_origin_list
+            assert len(origins) == 2
+            assert "http://localhost:3000" in origins
+            assert "https://app.babelflow.io" in origins
+
     def test_azure_keys_default_empty(self) -> None:
         """Azure key'leri default olarak boş string olmalı."""
         settings = Settings()
