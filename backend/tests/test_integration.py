@@ -81,3 +81,28 @@ class TestIntegration:
             ws.send_bytes(self._make_sine_chunk())
             ws.send_json({"type": "config", "target_langs": ["th"]})
             ws.send_bytes(self._make_sine_chunk())
+
+    def test_speech_produces_transcript(self, client: TestClient) -> None:
+        """Yeterli konuşma + sessizlik → partial_transcript mesajı dönmeli."""
+        with client.websocket_connect("/ws/translate") as ws:
+            config = {
+                "type": "config",
+                "source_lang": "auto",
+                "target_langs": ["en"],
+            }
+            ws.send_json(config)
+
+            # 10 chunk konuşma (300ms > 250ms min)
+            for _ in range(10):
+                ws.send_bytes(self._make_sine_chunk())
+
+            # 12 chunk sessizlik (360ms > 300ms min_silence)
+            silence = bytes(CHUNK_BYTES)
+            for _ in range(12):
+                ws.send_bytes(silence)
+
+            # Transcript mesajı gelmiş olmalı
+            response = ws.receive_json()
+            assert response["type"] == "partial_transcript"
+            assert "text" in response
+            assert "lang" in response
