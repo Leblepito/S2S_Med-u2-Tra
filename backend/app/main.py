@@ -4,8 +4,11 @@ import logging
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.staticfiles import StaticFiles
 
 from app.admin.routes import router as admin_router
 from app.config import get_settings
@@ -52,9 +55,15 @@ app = FastAPI(title="BabelFlow", version="0.1.0", lifespan=lifespan)
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(RateLimitMiddleware, max_requests_per_minute=120)
 app.add_middleware(CORSPreflightCacheMiddleware)
+_WIDGET_CORS_ORIGINS = [
+    "https://leblepito.com",
+    "https://www.leblepito.com",
+    "http://localhost:3333",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origin_list,
+    allow_origins=settings.cors_origin_list + _WIDGET_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -62,6 +71,10 @@ app.add_middleware(
 
 app.include_router(admin_router)
 app.websocket("/ws/translate")(websocket_translate)
+
+_WIDGET_DIR = Path(__file__).parent / "static" / "widget"
+_WIDGET_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/widget", StaticFiles(directory=str(_WIDGET_DIR)), name="widget")
 
 
 @app.get("/health")
