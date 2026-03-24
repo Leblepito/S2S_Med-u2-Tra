@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BabelFlow Widget Test</title>
+  <style>
+    body { font-family: system-ui; padding: 40px; background: #f9fafb; }
+    h1 { color: #1f2937; }
+    p { color: #6b7280; max-width: 600px; }
+    .log { background: #1f2937; color: #10b981; padding: 16px; border-radius: 8px;
+           font-family: monospace; font-size: 13px; max-height: 300px; overflow-y: auto;
+           white-space: pre-wrap; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>BabelFlow Widget Test Page</h1>
+  <p>The floating translation button should appear in the bottom-right corner.
+     Click it to open the panel, then use the mic to test real-time translation.</p>
+  <div class="log" id="log"></div>
+
+  <script src="/widget/babelflow.js"></script>
+  <script>
+    var logEl = document.getElementById('log');
+    function log(msg) {
+      var line = new Date().toLocaleTimeString() + ' ' + msg + '\n';
+      logEl.textContent += line;
+      logEl.scrollTop = logEl.scrollHeight;
+      console.log('[Test]', msg);
+    }
+
+    BabelFlow.init({
+      apiUrl: 'ws://localhost:8000/ws/translate',
+      position: 'bottom-right',
+      sourceLang: 'auto',
+      targetLang: 'tr',
+      theme: 'light',
+      onTranslation: function(d) {
+        log('Translation: ' + d.original_text + ' -> ' + d.translated_text);
+      },
+      onSessionStart: function(id) { log('Session started: ' + id); },
+      onSessionEnd: function(id, stats) { log('Session ended: ' + id + ' (' + stats.translations + ' translations)'); },
+      onError: function(err) { log('Error: ' + (err.message || err)); }
+    });
+
+    log('BabelFlow widget initialized');
+  </script>
+</body>
+</html>
