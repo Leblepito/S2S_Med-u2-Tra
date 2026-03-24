@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.staticfiles import StaticFiles
 
 from app.admin.routes import router as admin_router
+from app.routers.widget import router as widget_router
 from app.config import get_settings
 from app.constants import SUPPORTED_LANGS
 from app.database.connection import create_tables, get_session_factory
@@ -70,6 +71,7 @@ app.add_middleware(
 )
 
 app.include_router(admin_router)
+app.include_router(widget_router)
 app.websocket("/ws/translate")(websocket_translate)
 
 _WIDGET_DIR = Path(__file__).parent / "static" / "widget"
