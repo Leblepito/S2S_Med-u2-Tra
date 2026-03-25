@@ -18,6 +18,7 @@ from app.database.connection import create_tables, get_session_factory
 from app.glossary.seed import seed_glossary_data
 from app.middleware import CORSPreflightCacheMiddleware, RateLimitMiddleware, RequestLoggingMiddleware
 from app.websockets.audio_handler import get_metrics, websocket_translate
+from app.websockets.device_handler import device_websocket_handler
 
 settings = get_settings()
 
@@ -73,6 +74,7 @@ app.add_middleware(
 app.include_router(admin_router)
 app.include_router(widget_router)
 app.websocket("/ws/translate")(websocket_translate)
+app.add_api_websocket_route("/ws/device/{device_id}", device_websocket_handler)
 
 _WIDGET_DIR = Path(__file__).parent / "static" / "widget"
 _WIDGET_DIR.mkdir(parents=True, exist_ok=True)
