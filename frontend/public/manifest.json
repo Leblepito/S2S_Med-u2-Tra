@@ -1,0 +1,16 @@
+{
+  "name": "BabelFlow",
+  "short_name": "BabelFlow",
+  "description": "Real-time multi-language speech translator",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f9fafb",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}
