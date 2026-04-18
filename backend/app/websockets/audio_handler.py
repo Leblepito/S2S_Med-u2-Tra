@@ -5,7 +5,8 @@ import json
 import logging
 import time
 
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocket, WebSocketDisconnect, Query
+from app.auth import verify_token
 
 from app.audio.capture import validate_chunk
 from app.config import get_settings
@@ -44,8 +45,17 @@ def get_metrics() -> dict:
     }
 
 
-async def websocket_translate(ws: WebSocket) -> None:
+async def websocket_translate(ws: WebSocket, token: str = Query(None)) -> None:
     """WebSocket audio translation endpoint."""
+    if not token:
+        await ws.close(code=4003, reason="Missing token")
+        return
+    
+    payload = verify_token(token)
+    if not payload:
+        await ws.close(code=4003, reason="Invalid token")
+        return
+
     global _total_sessions
     await ws.accept()
     session_start = time.perf_counter()

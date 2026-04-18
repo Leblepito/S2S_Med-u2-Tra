@@ -27,12 +27,13 @@ export class BabelWebSocket {
     }
   }
 
-  connect(config: ConfigMessage): void {
+  connect(config: ConfigMessage, token?: string): void {
     this.disconnect()
     this.pendingConfig = config
     this.emit('statusChange', 'connecting')
 
-    this.ws = new WebSocket(this.url)
+    const urlWithToken = token ? `${this.url}?token=${token}` : this.url
+    this.ws = new WebSocket(urlWithToken)
     this.ws.binaryType = 'arraybuffer'
 
     this.ws.onopen = () => {

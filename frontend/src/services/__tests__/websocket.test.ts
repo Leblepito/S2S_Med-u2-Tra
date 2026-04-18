@@ -72,15 +72,15 @@ describe('BabelWebSocket', () => {
   })
 
   describe('connect', () => {
-    it('creates WebSocket with correct URL', () => {
+    it('creates WebSocket with correct URL and token', () => {
       const config: ConfigMessage = {
         type: 'config',
         source_lang: 'auto',
         target_langs: ['en', 'th'],
         enable_diarization: false,
       }
-      bws.connect(config)
-      expect(mockWs.url).toBe('ws://localhost:8000/ws/translate')
+      bws.connect(config, 'test-token')
+      expect(mockWs.url).toBe('ws://localhost:8000/ws/translate?token=test-token')
     })
 
     it('sends config message on open', () => {

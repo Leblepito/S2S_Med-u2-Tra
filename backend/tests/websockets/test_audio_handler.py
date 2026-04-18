@@ -15,9 +15,9 @@ class TestWebSocketAudioHandler:
     def client(self) -> TestClient:
         return TestClient(app)
 
-    def test_connect_with_config(self, client: TestClient) -> None:
+    def test_connect_with_config(self, client: TestClient, valid_token: str) -> None:
         """Config mesajıyla bağlantı kabul edilmeli."""
-        with client.websocket_connect("/ws/translate") as ws:
+        with client.websocket_connect(f"/ws/translate?token={valid_token}") as ws:
             config = {
                 "type": "config",
                 "source_lang": "auto",
@@ -27,23 +27,23 @@ class TestWebSocketAudioHandler:
             ws.send_json(config)
             # Bağlantı açık kalmalı, hata mesajı gelmemeli
 
-    def test_config_required_first(self, client: TestClient) -> None:
+    def test_config_required_first(self, client: TestClient, valid_token: str) -> None:
         """İlk mesaj config olmalı, değilse error + close."""
-        with client.websocket_connect("/ws/translate") as ws:
+        with client.websocket_connect(f"/ws/translate?token={valid_token}") as ws:
             ws.send_bytes(bytes(960))  # binary gönder, config değil
             response = ws.receive_json()
             assert response["type"] == "error"
 
-    def test_invalid_config_rejected(self, client: TestClient) -> None:
+    def test_invalid_config_rejected(self, client: TestClient, valid_token: str) -> None:
         """Geçersiz config → error mesajı."""
-        with client.websocket_connect("/ws/translate") as ws:
+        with client.websocket_connect(f"/ws/translate?token={valid_token}") as ws:
             ws.send_json({"type": "config", "target_langs": []})
             response = ws.receive_json()
             assert response["type"] == "error"
 
-    def test_binary_after_config(self, client: TestClient) -> None:
+    def test_binary_after_config(self, client: TestClient, valid_token: str) -> None:
         """Config sonrası binary chunk kabul edilmeli."""
-        with client.websocket_connect("/ws/translate") as ws:
+        with client.websocket_connect(f"/ws/translate?token={valid_token}") as ws:
             config = {
                 "type": "config",
                 "source_lang": "auto",
@@ -52,9 +52,9 @@ class TestWebSocketAudioHandler:
             ws.send_json(config)
             ws.send_bytes(bytes(960))  # valid chunk — hata gelmemeli
 
-    def test_invalid_json_after_config(self, client: TestClient) -> None:
+    def test_invalid_json_after_config(self, client: TestClient, valid_token: str) -> None:
         """Config sonrası geçersiz JSON → error mesajı (bağlantı kapanmaz)."""
-        with client.websocket_connect("/ws/translate") as ws:
+        with client.websocket_connect(f"/ws/translate?token={valid_token}") as ws:
             config = {
                 "type": "config",
                 "source_lang": "auto",
@@ -65,9 +65,9 @@ class TestWebSocketAudioHandler:
             response = ws.receive_json()
             assert response["type"] == "error"
 
-    def test_oversized_chunk_rejected(self, client: TestClient) -> None:
+    def test_oversized_chunk_rejected(self, client: TestClient, valid_token: str) -> None:
         """10KB'dan büyük chunk → error mesajı."""
-        with client.websocket_connect("/ws/translate") as ws:
+        with client.websocket_connect(f"/ws/translate?token={valid_token}") as ws:
             ws.send_json({
                 "type": "config",
                 "source_lang": "auto",

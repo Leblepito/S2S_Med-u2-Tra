@@ -20,16 +20,17 @@ const STATUS_COLORS: Record<ConnectionStatus, string> = {
 
 interface AudioCaptureProps {
   config: ConfigMessage
+  token?: string
 }
 
-export function AudioCapture({ config }: AudioCaptureProps) {
+export function AudioCapture({ config, token }: AudioCaptureProps) {
   const { status, connect, disconnect, sendAudio } = useWebSocket(WS_URL)
   const { isCapturing, error, startCapture, stopCapture } = useAudioStream()
 
   const handleStart = useCallback(async () => {
-    connect(config)
+    connect(config, token)
     await startCapture(sendAudio)
-  }, [config, connect, startCapture, sendAudio])
+  }, [config, connect, startCapture, sendAudio, token])
 
   const handleStop = useCallback(() => {
     stopCapture()

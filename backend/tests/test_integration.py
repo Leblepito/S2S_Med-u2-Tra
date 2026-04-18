@@ -33,10 +33,10 @@ class TestIntegration:
         assert response.json()["status"] == "ok"
 
     def test_full_flow_connect_config_audio_disconnect(
-        self, client: TestClient
+        self, client: TestClient, valid_token: str
     ) -> None:
         """End-to-end: connect → config → 10 audio chunk → disconnect."""
-        with client.websocket_connect("/ws/translate") as ws:
+        with client.websocket_connect(f"/ws/translate?token={valid_token}") as ws:
             # 1. Config gönder
             config = {
                 "type": "config",
@@ -53,9 +53,9 @@ class TestIntegration:
 
             # 3. Disconnect (context manager çıkışı)
 
-    def test_silence_chunks(self, client: TestClient) -> None:
+    def test_silence_chunks(self, client: TestClient, valid_token: str) -> None:
         """Sessizlik chunk'ları kabul edilmeli."""
-        with client.websocket_connect("/ws/translate") as ws:
+        with client.websocket_connect(f"/ws/translate?token={valid_token}") as ws:
             config = {
                 "type": "config",
                 "source_lang": "tr",
@@ -68,9 +68,9 @@ class TestIntegration:
             for _ in range(5):
                 ws.send_bytes(silence)
 
-    def test_mixed_audio_and_json(self, client: TestClient) -> None:
+    def test_mixed_audio_and_json(self, client: TestClient, valid_token: str) -> None:
         """Audio chunk'lar arası JSON mesajı gönderilebilmeli."""
-        with client.websocket_connect("/ws/translate") as ws:
+        with client.websocket_connect(f"/ws/translate?token={valid_token}") as ws:
             config = {
                 "type": "config",
                 "source_lang": "auto",
@@ -82,9 +82,9 @@ class TestIntegration:
             ws.send_json({"type": "config", "target_langs": ["th"]})
             ws.send_bytes(self._make_sine_chunk())
 
-    def test_speech_produces_transcript(self, client: TestClient) -> None:
+    def test_speech_produces_transcript(self, client: TestClient, valid_token: str) -> None:
         """Yeterli konuşma + sessizlik → partial_transcript mesajı dönmeli."""
-        with client.websocket_connect("/ws/translate") as ws:
+        with client.websocket_connect(f"/ws/translate?token={valid_token}") as ws:
             config = {
                 "type": "config",
                 "source_lang": "auto",

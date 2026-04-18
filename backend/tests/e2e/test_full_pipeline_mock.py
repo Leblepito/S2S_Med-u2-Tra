@@ -29,10 +29,10 @@ class TestFullPipelineMock:
         return TestClient(app)
 
     def test_full_flow_transcript_translation_tts(
-        self, client: TestClient
+        self, client: TestClient, valid_token: str
     ) -> None:
         """Audio → transcript → translation → TTS binary frame."""
-        with client.websocket_connect("/ws/translate") as ws:
+        with client.websocket_connect(f"/ws/translate?token={valid_token}") as ws:
             ws.send_json({
                 "type": "config",
                 "source_lang": "auto",
@@ -66,9 +66,9 @@ class TestFullPipelineMock:
                 assert header.lang == "en"
                 assert len(audio) > 0
 
-    def test_diarization_enabled(self, client: TestClient) -> None:
+    def test_diarization_enabled(self, client: TestClient, valid_token: str) -> None:
         """Diarization açık → speaker_id atanıyor."""
-        with client.websocket_connect("/ws/translate") as ws:
+        with client.websocket_connect(f"/ws/translate?token={valid_token}") as ws:
             ws.send_json({
                 "type": "config",
                 "source_lang": "auto",
@@ -84,9 +84,9 @@ class TestFullPipelineMock:
             transcript = ws.receive_json()
             assert transcript["speaker_id"] >= 0
 
-    def test_multiple_target_langs(self, client: TestClient) -> None:
+    def test_multiple_target_langs(self, client: TestClient, valid_token: str) -> None:
         """Birden fazla hedef dil → her biri için TTS frame."""
-        with client.websocket_connect("/ws/translate") as ws:
+        with client.websocket_connect(f"/ws/translate?token={valid_token}") as ws:
             ws.send_json({
                 "type": "config",
                 "source_lang": "auto",

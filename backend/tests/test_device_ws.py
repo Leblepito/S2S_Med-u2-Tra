@@ -25,9 +25,9 @@ def test_device_ws_rejects_empty_token():
             pass
 
 
-def test_device_ws_accepts_with_token():
+def test_device_ws_accepts_with_token(valid_token: str):
     """Device WS should accept connection when valid token provided."""
-    with client.websocket_connect("/ws/device/test-device-1?token=test-secret") as ws:
+    with client.websocket_connect(f"/ws/device/test-device-1?token={valid_token}") as ws:
         # Send config
         ws.send_text(json.dumps({
             "type": "config",
@@ -37,9 +37,9 @@ def test_device_ws_accepts_with_token():
         ws.close()
 
 
-def test_device_ws_heartbeat_ack():
+def test_device_ws_heartbeat_ack(valid_token: str):
     """Device WS should respond to heartbeat with heartbeat_ack."""
-    with client.websocket_connect("/ws/device/test-device-2?token=abc123") as ws:
+    with client.websocket_connect(f"/ws/device/test-device-2?token={valid_token}") as ws:
         ws.send_text(json.dumps({"type": "heartbeat"}))
         resp = ws.receive_text()
         data = json.loads(resp)
@@ -47,11 +47,11 @@ def test_device_ws_heartbeat_ack():
         ws.close()
 
 
-def test_device_ws_accepts_binary_audio():
+def test_device_ws_accepts_binary_audio(valid_token: str):
     """Device WS should accept 8kHz PCM16 binary audio without error."""
     import numpy as np
 
-    with client.websocket_connect("/ws/device/test-device-3?token=xyz") as ws:
+    with client.websocket_connect(f"/ws/device/test-device-3?token={valid_token}") as ws:
         # Send config first
         ws.send_text(json.dumps({
             "type": "config",

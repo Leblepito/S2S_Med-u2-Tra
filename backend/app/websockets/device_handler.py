@@ -10,6 +10,7 @@ from typing import Any
 
 import numpy as np
 from fastapi import Query, WebSocket, WebSocketDisconnect
+from app.auth import verify_token
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,11 @@ async def device_websocket_handler(
     """
     if not token:
         await websocket.close(code=4003, reason="Missing device token")
+        return
+
+    payload = verify_token(token)
+    if not payload:
+        await websocket.close(code=4003, reason="Invalid device token")
         return
 
     await websocket.accept()

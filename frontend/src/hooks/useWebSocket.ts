@@ -31,8 +31,8 @@ export function useWebSocket(url: string): UseWebSocketReturn {
     }
   }, [url])
 
-  const connect = useCallback((config: ConfigMessage) => {
-    wsRef.current?.connect(config)
+  const connect = useCallback((config: ConfigMessage, token?: string) => {
+    wsRef.current?.connect(config, token)
   }, [])
 
   const disconnect = useCallback(() => {

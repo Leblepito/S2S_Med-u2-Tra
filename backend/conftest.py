@@ -6,7 +6,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings
+from app.auth import create_access_token
 from app.main import app
+
+
+@pytest.fixture
+def valid_token() -> str:
+    """Geçerli bir JWT token döner."""
+    return create_access_token({"sub": "test-user", "role": "admin"})
 
 
 @pytest.fixture

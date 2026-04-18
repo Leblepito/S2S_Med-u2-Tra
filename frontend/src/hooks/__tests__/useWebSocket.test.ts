@@ -47,9 +47,9 @@ describe('useWebSocket', () => {
       enable_diarization: false,
     }
     act(() => {
-      result.current.connect(config)
+      result.current.connect(config, 'test-token')
     })
-    expect(mockConnect).toHaveBeenCalledWith(config)
+    expect(mockConnect).toHaveBeenCalledWith(config, 'test-token')
   })
 
   it('disconnect calls BabelWebSocket.disconnect', () => {

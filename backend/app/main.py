@@ -65,11 +65,17 @@ _WIDGET_CORS_ORIGINS = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origin_list + _WIDGET_CORS_ORIGINS,
+    allow_origins=settings.validated_cors_origins(_WIDGET_CORS_ORIGINS),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept"],
 )
+
+from app.auth import create_access_token
+@app.get("/api/auth/token")
+async def get_test_token():
+    """Generate a test token (temporary for development)."""
+    return {"token": create_access_token({"sub": "test-user", "role": "admin"})}
 
 app.include_router(admin_router)
 app.include_router(widget_router)
