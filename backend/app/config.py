@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "http://localhost:3000"
     ENVIRONMENT: str = "development"
 
+    # Rate limit backend — "memory" (default, single-process) or "redis"
+    # (shared across uvicorn workers; uses REDIS_URL).
+    RATE_LIMIT_BACKEND: str = "memory"
+
     @property
     def cors_origin_list(self) -> list[str]:
         """CORS origins'i liste olarak döndür."""

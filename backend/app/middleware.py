@@ -8,6 +8,8 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from app.rate_limit_backend import InMemoryBackend, RateLimitBackend
+
 logger = logging.getLogger(__name__)
 
 
@@ -44,39 +46,48 @@ class CORSPreflightCacheMiddleware(BaseHTTPMiddleware):
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    """IP-based rate limiting.
+    """IP-based rate limiting with a pluggable backend.
+
+    The original behavior (per-process in-memory counter) is preserved
+    when no backend is supplied: this is the right default for local
+    dev and single-worker deploys. Provide an explicit backend
+    (`InMemoryBackend()` or `RedisBackend(url)`, or anything matching
+    the `RateLimitBackend` Protocol) to share counters across uvicorn
+    workers — see `app.rate_limit_backend.make_backend`.
 
     Args:
         max_requests_per_minute: HTTP request limiti per IP.
+        backend: rate-limit counter store. Defaults to InMemoryBackend.
     """
 
-    def __init__(self, app: object, max_requests_per_minute: int = 120) -> None:
+    def __init__(
+        self,
+        app: object,
+        max_requests_per_minute: int = 120,
+        backend: RateLimitBackend | None = None,
+    ) -> None:
         super().__init__(app)
         self._max_rpm = max_requests_per_minute
-        self._requests: dict[str, list[float]] = defaultdict(list)
+        self._backend: RateLimitBackend = backend or InMemoryBackend()
 
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
         """Rate limit kontrolü."""
         client_ip = self._get_client_ip(request)
-        now = time.monotonic()
+        allowed, remaining = await self._backend.hit(
+            key=f"rl:{client_ip}", limit=self._max_rpm, window_seconds=60
+        )
 
-        # Eski kayıtları temizle (son 60s)
-        self._requests[client_ip] = [
-            t for t in self._requests[client_ip] if now - t < 60
-        ]
-
-        if len(self._requests[client_ip]) >= self._max_rpm:
+        if not allowed:
             logger.warning(f"[RATE_LIMIT] {client_ip}: {self._max_rpm}/min exceeded")
             return JSONResponse(
                 status_code=429,
                 content={"error": "Too many requests", "retry_after": 60},
+                headers={"Retry-After": "60"},
             )
 
-        self._requests[client_ip].append(now)
         response = await call_next(request)
-        remaining = self._max_rpm - len(self._requests[client_ip])
         response.headers["X-RateLimit-Remaining"] = str(remaining)
         return response
 

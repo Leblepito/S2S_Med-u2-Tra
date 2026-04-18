@@ -17,6 +17,7 @@ from app.constants import SUPPORTED_LANGS
 from app.database.connection import create_tables, get_session_factory
 from app.glossary.seed import seed_glossary_data
 from app.middleware import CORSPreflightCacheMiddleware, RateLimitMiddleware, RequestLoggingMiddleware
+from app.rate_limit_backend import make_backend
 from app.websockets.audio_handler import get_metrics, websocket_translate
 from app.websockets.device_handler import device_websocket_handler
 
@@ -55,7 +56,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="BabelFlow", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(RequestLoggingMiddleware)
-app.add_middleware(RateLimitMiddleware, max_requests_per_minute=120)
+app.add_middleware(
+    RateLimitMiddleware,
+    max_requests_per_minute=120,
+    backend=make_backend(settings.RATE_LIMIT_BACKEND, redis_url=settings.REDIS_URL),
+)
 app.add_middleware(CORSPreflightCacheMiddleware)
 _WIDGET_CORS_ORIGINS = [
     "https://leblepito.com",
