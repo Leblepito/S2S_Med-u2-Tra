@@ -10,3 +10,4 @@ dist/
 *.db
 .superpowers-ref/
 .awesome-agents-ref/
+.vercel
